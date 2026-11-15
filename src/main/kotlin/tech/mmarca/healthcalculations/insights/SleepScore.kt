@@ -6,7 +6,6 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import tech.mmarca.healthcalculations.stats.timeBucketedAverageOrNull
 import tech.mmarca.healthcalculations.model.DailyHrv
 import tech.mmarca.healthcalculations.model.HrvSample
 import tech.mmarca.healthcalculations.model.SleepData
@@ -118,19 +117,10 @@ fun overnightHrvInputsByDate(
     zone: ZoneId = ZoneId.systemDefault(),
 ): Map<LocalDate, OvernightHrvInput> {
     if (end.isBefore(start) || hrvSamples.isEmpty()) return emptyMap()
-    val sessionsByDate = sessions.groupBy { it.endTime.atZone(zone).toLocalDate() }
+    val byDate = nightRmssdByDate(sessions, hrvSamples, zone)
     val nightRmssd = generateSequence(start) { date ->
         date.plusDays(1).takeUnless { it.isAfter(end) }
-    }.associateWith { date ->
-        val session = sessionsByDate[date].orEmpty().mainSleepSession() ?: return@associateWith null
-        hrvSamples
-            .filter { sample ->
-                !sample.time.isBefore(session.startTime) &&
-                    !sample.time.isAfter(session.endTime) &&
-                    sample.rmssdMs > 0.0
-            }
-            .timeBucketedAverageOrNull(time = { it.time }, value = { it.rmssdMs })
-    }
+    }.associateWith { byDate[it] }
     return overnightHrvInputsFromNightRmssd(nightRmssd)
 }
 
@@ -487,7 +477,7 @@ private fun stagePercents(
     return (deepMs * 100.0 / sleepDurationMs) to (remMs * 100.0 / sleepDurationMs)
 }
 
-private fun List<SleepData>.mainSleepSession(): SleepData? =
+internal fun List<SleepData>.mainSleepSession(): SleepData? =
     maxByOrNull { sleepDurationMsFromStages(it.stages, it.durationMs) }
 
 private fun SleepData.sleepMidpointMinute(zone: ZoneId): Int {

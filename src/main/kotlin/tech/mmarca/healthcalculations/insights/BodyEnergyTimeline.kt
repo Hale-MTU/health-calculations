@@ -12,6 +12,7 @@ import tech.mmarca.healthcalculations.model.HrvSample
 import tech.mmarca.healthcalculations.model.RespiratoryRateEntry
 import tech.mmarca.healthcalculations.model.SleepData
 import tech.mmarca.healthcalculations.model.sleepDurationMsFromStages
+import tech.mmarca.healthcalculations.preferences.BiologicalSex
 import tech.mmarca.healthcalculations.preferences.BodyEnergyCalibration
 import tech.mmarca.healthcalculations.preferences.BodyProfile
 import tech.mmarca.healthcalculations.preferences.HeartZoneThresholds
@@ -20,14 +21,16 @@ import tech.mmarca.healthcalculations.preferences.HeartZoneThresholds
  * The 5-minute-bucket Body Energy timeline.
  *
  * An energy balance: a basal waking floor plus an activity drain, the stronger
- * of the heart-rate-zone estimate (Banister TRIMP;
+ * of the heart-rate estimate (Banister TRIMP from the ACSM's light intensity on;
  * Morton, Fitz-Clarke and Banister 1990, doi:10.1152/jappl.1990.69.3.1171) and an active-calorie
- * estimate. The framing is a product design, not a published model.
+ * estimate. Sleep charges it, scaled by the night's HRV against the personal
+ * baseline ([HrvBaseline]). The framing is a product design, not a published
+ * model: the parts have sources, the points they move do not.
  */
 const val BodyEnergyTimelineBucketMinutes = 5L
 
 /** Bump when a change means every stored day must be recomputed. */
-const val BodyEnergyTimelineAlgorithmVersion = 12
+const val BodyEnergyTimelineAlgorithmVersion = 13
 
 /** Start score when there is no previous day to carry from. */
 const val BodyEnergyNeutralStartScore = 50
@@ -59,6 +62,13 @@ private const val SleepQualitySwing = 0.20
  */
 private const val TypicalSleepQualityFraction = 0.72
 private const val SleepQualityFractionSpan = 0.32
+
+/**
+ * Points of activity drain per minute of Banister TRIMP. Chosen so a minute at
+ * half the heart rate reserve (men's constants) drains the 0.07 the moderate
+ * zone did before the drain followed TRIMP: a scale, not a published value.
+ */
+private const val IntensityDrainPointsPerTrimp = 0.084
 
 /**
  * Points charged per minute of quiet waking time. Lowered from 0.02 when the
@@ -274,6 +284,7 @@ fun bodyEnergyCarryOverFloorApplies(previousEndScore: Int?): Boolean =
 data class BodyEnergyTimelineInputs(
     val date: LocalDate,
     val heartRateSamples: List<HeartRateSample>,
+    /** Covering [sleepSessions], the hours of a night before midnight included: a night is valued whole. */
     val hrvSamples: List<HrvSample> = emptyList(),
     val sleepSessions: List<SleepData> = emptyList(),
     val workouts: List<ExerciseData> = emptyList(),
@@ -285,7 +296,8 @@ data class BodyEnergyTimelineInputs(
     val restingHeartRateBpm: Long? = null,
     val baselineRestingHeartRateBpm: Long? = null,
     val observedMaxHeartRateBpm: Long? = null,
-    val hrvBaselineRmssdMs: Double? = null,
+    /** The 28 nights before [date], each valued by [nightRmssdByDate]. */
+    val hrvBaseline: HrvBaseline? = null,
     val respiratoryRateBaseline: Double? = null,
     val previousEndScore: Int? = null,
     /** Null when the caller cannot tell a cold start from a chain gap. */
@@ -333,12 +345,6 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
         time = { it.time },
         value = { it.beatsPerMinute.toDouble() },
     )
-    val hrvAverages = inputs.hrvSamples.bucketedAverages(
-        bucketCount = bucketCount,
-        dayStart = dayStart,
-        time = { it.time },
-        value = { it.rmssdMs },
-    )
     val respiratoryAverages = inputs.respiratoryRateSamples.bucketedAverages(
         bucketCount = bucketCount,
         dayStart = dayStart,
@@ -375,6 +381,9 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
 
     // One factor per night, not per bucket.
     val qualityFactors = inputs.sleepSessions.associate { it.id to sleepChargeQualityFactor(it) }
+    // Each night's HRV against the baseline, one factor per night; naps stay neutral.
+    val hrvChargeMultipliers = nightsRmssd(inputs.sleepSessions, inputs.hrvSamples, inputs.zone).values
+        .associate { night -> night.session.id to hrvChargeMultiplier(inputs.hrvBaseline, night.rmssdMs) }
 
     // The day opens where the previous one closed, floored.
     var score = bodyEnergySeedScore(inputs.previousEndScore).toDouble()
@@ -408,10 +417,14 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
                 1.0
             }
             val workoutMinutes = inputs.workouts.sumOf { it.overlapMinutes(bucketStart, bucketEnd) }
-            val hrvFactor = hrvRecoveryFactor(
-                baseline = inputs.hrvBaselineRmssdMs,
-                average = hrvAverages[index],
-            )
+            // The baseline is a night's HRV, so only the whole night's HRV is held against it.
+            val hrvChargeMultiplier = if (sleepMinutes > 0.0) {
+                inputs.sleepSessions.sumOf { session ->
+                    session.overlapMinutes(bucketStart, bucketEnd) * (hrvChargeMultipliers[session.id] ?: 1.0)
+                } / sleepMinutes
+            } else {
+                1.0
+            }
             val respirationFactor = respiratoryStressFactor(
                 baseline = inputs.respiratoryRateBaseline,
                 average = respiratoryAverages[index],
@@ -458,18 +471,22 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
                     else -> 0.0
                 }
             }
-            val rawIntensityDrain = if (avgHeartRate != null) {
-                drainRateForZone(zone) * bucketMinutes * exerciseMultiplier * fatigueMultiplier
-            } else if (workoutMinutes >= 2.0) {
-                0.05 * workoutMinutes
-            } else {
-                0.0
+            val reserve = avgHeartRate?.let { intensityContext.reserveFor(it) }
+            val rawIntensityDrain = when {
+                // Below the ACSM's light intensity (zone 1) the basal drain covers it.
+                reserve != null && zone < 1 -> 0.0
+                reserve != null -> IntensityDrainPointsPerTrimp * banisterTrimpPerMinute(intensityContext.sex, reserve) *
+                    bucketMinutes * exerciseMultiplier * fatigueMultiplier
+                // Manual zones carry no maximum, so no reserve: the zone's own rate.
+                avgHeartRate != null -> drainRateForZone(zone) * bucketMinutes * exerciseMultiplier * fatigueMultiplier
+                workoutMinutes >= 2.0 -> 0.05 * workoutMinutes
+                else -> 0.0
             }
             // Captures movement that never lifts heart rate out of the low zones.
             val rawActivityEnergyDrain = if (notSleeping) activeKcal * ActiveKcalToPoints else 0.0
             val rawRecoveryDebtDrain = if (recoveryDebtBuckets > 0) 0.015 * bucketMinutes else 0.0
             val rawBasalDrain = if (awakePresent) BasalPointsPerMinute * bucketMinutes * basalScale else 0.0
-            val drainMultiplier = maxOf(hrvFactor.drainMultiplier, respirationFactor.drainMultiplier)
+            val drainMultiplier = respirationFactor.drainMultiplier
             val intensityDrain = rawIntensityDrain * drainMultiplier * gains.activityDrainGain
             val activityEnergyDrain = rawActivityEnergyDrain * drainMultiplier * gains.activityDrainGain
             val stressDrain = rawStressDrain * drainMultiplier * gains.stressDrainGain
@@ -495,13 +512,12 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
             }
             // A fraction of reserve, not an offset, so it survives profile changes.
             // Falls back to resting-plus-8 when there is no max.
-            val restReserve = avgHeartRate?.let { intensityContext.reserveFor(it) }
-            val quietEnough = restReserve?.let { it <= RestChargeReserveCeiling } ?: restEligible
+            val quietEnough = reserve?.let { it <= RestChargeReserveCeiling } ?: restEligible
             // Quiet waking time charges modestly. Not gated on activity drain: the
             // activity series is interpolated everywhere, so the two net out.
             // Recovery debt is the exception: the body is not yet recovering.
             // Quality scales the sleep charge only.
-            val chargeModifier = hrvFactor.chargeMultiplier / respirationFactor.chargePenalty
+            val chargeModifier = hrvChargeMultiplier / respirationFactor.chargePenalty
             val charge = when {
                 sleepMinutes > 0.0 ->
                     SleepPointsPerMinute * sleepMinutes * sleepQualityFactor *
@@ -635,7 +651,7 @@ private fun BodyEnergyTimelineInputs.inputSummary(heartRateSampleCount: Int): Bo
         hasRestingHeartRate = restingHeartRateBpm != null,
         hasBaselineRestingHeartRate = baselineRestingHeartRateBpm != null,
         hasObservedMaxHeartRate = observedMaxHeartRateBpm != null,
-        hasHrvBaseline = hrvBaselineRmssdMs != null,
+        hasHrvBaseline = hrvBaseline != null,
         hasRespiratoryBaseline = respiratoryRateBaseline != null,
         previousEndScore = previousEndScore,
         carryOverFloorApplied = bodyEnergyCarryOverFloorApplies(previousEndScore),
@@ -698,6 +714,7 @@ private data class IntensityContext(
     val maxHeartRateBpm: Long?,
     val manualZones: HeartZoneThresholds?,
     val confidence: BodyEnergyConfidence,
+    val sex: BiologicalSex?,
 ) {
     /** Fraction of heart-rate reserve at [heartRateBpm], or null without a resting/max pair. */
     fun reserveFor(heartRateBpm: Double): Double? {
@@ -749,6 +766,7 @@ private fun resolveIntensityContext(
             maxHeartRateBpm = null,
             manualZones = calibration.manualZoneThresholdsBpm,
             confidence = BodyEnergyConfidence.HIGH,
+            sex = profile.sex,
         )
     }
 
@@ -784,29 +802,35 @@ private fun resolveIntensityContext(
         maxHeartRateBpm = maxHeartRate,
         manualZones = null,
         confidence = confidence,
+        sex = profile.sex,
     )
 }
-
-private data class HrvFactor(
-    val drainMultiplier: Double,
-    val chargeMultiplier: Double,
-)
 
 private data class RespiratoryFactor(
     val drainMultiplier: Double,
     val chargePenalty: Double,
 )
 
-private fun hrvRecoveryFactor(
-    baseline: Double?,
-    average: Double?,
-): HrvFactor {
-    if (baseline == null || average == null) return HrvFactor(1.0, 1.0)
+/**
+ * How a night's HRV ([nightRmssdByDate]) scales its charge. A night more than
+ * one standard deviation below the baseline ([HrvBaseline]) is a meaningful
+ * drop, the single-day criterion of Kiviniemi et al. (Eur J Appl Physiol
+ * 2007;101(6):743-751, doi:10.1007/s00421-007-0552-2), and charges less; two
+ * below, a clearly suppressed night, charges less still. A night above the
+ * baseline stays neutral: a rise also comes with functional overreaching (Le
+ * Meur et al., Med Sci Sports Exerc 2013;45(11):2061-2071,
+ * doi:10.1249/MSS.0b013e3182980125), so it does not read as better recovery.
+ * The multipliers and the second step are app heuristics, no published source.
+ */
+private fun hrvChargeMultiplier(
+    baseline: HrvBaseline?,
+    rmssdMs: Double,
+): Double {
+    val deviations = baseline?.standardDeviationsFromMean(rmssdMs) ?: return 1.0
     return when {
-        average < baseline * 0.75 -> HrvFactor(drainMultiplier = 1.18, chargeMultiplier = 0.75)
-        average < baseline * 0.90 -> HrvFactor(drainMultiplier = 1.08, chargeMultiplier = 0.90)
-        average > baseline * 1.10 -> HrvFactor(drainMultiplier = 0.96, chargeMultiplier = 1.12)
-        else -> HrvFactor(1.0, 1.0)
+        deviations < -2.0 -> 0.75
+        deviations < -1.0 -> 0.90
+        else -> 1.0
     }
 }
 
