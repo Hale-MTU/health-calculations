@@ -48,16 +48,6 @@ fun Iterable<Double>.averageOrZero(): Double = averageOrNull() ?: 0.0
 @JvmName("averageOrZeroOfLong")
 fun Iterable<Long>.averageOrZero(): Double = averageOrNull() ?: 0.0
 
-/**
- * The middle value; the mean of the two middle values for an even count. No values have no
- * median: an empty list throws, so a caller decides what "unknown" means.
- */
-fun median(values: List<Double>): Double {
-    val sorted = values.sorted()
-    val middle = sorted.size / 2
-    return if (sorted.size % 2 == 1) sorted[middle] else (sorted[middle - 1] + sorted[middle]) / 2.0
-}
-
 /** The middle value; for an even count the mean of the two middle values. Null when empty. */
 fun Iterable<Double>.medianOrNull(): Double? {
     val sorted = sorted()

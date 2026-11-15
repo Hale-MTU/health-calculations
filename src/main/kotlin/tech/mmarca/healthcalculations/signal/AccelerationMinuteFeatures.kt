@@ -2,7 +2,7 @@ package tech.mmarca.healthcalculations.signal
 
 import kotlin.math.atan2
 import kotlin.math.sqrt
-import tech.mmarca.healthcalculations.stats.median
+import tech.mmarca.healthcalculations.stats.medianOrNull
 
 /**
  * The accelerometer part of one minute's features, per
@@ -48,9 +48,9 @@ class AccelerationMinuteFeatures(private val startEpochMillis: Long) {
         val angles = ArrayList<Double>(EPOCHS_PER_MINUTE)
         for ((ex, ey, ez) in epochs) {
             if (ez.size < MIN_EPOCH_SAMPLES) continue
-            val medX = median(ex)
-            val medY = median(ey)
-            val medZ = median(ez)
+            val medX = checkNotNull(ex.medianOrNull())
+            val medY = checkNotNull(ey.medianOrNull())
+            val medZ = checkNotNull(ez.medianOrNull())
             angles += atan2(medZ, sqrt(medX * medX + medY * medY)) * 180.0 / Math.PI
         }
         return Result(x.size, doubleArrayOf(mx, my, mz), doubleArrayOf(sx, sy, sz), angles)
