@@ -1,0 +1,22 @@
+# Claude / AI
+.claude/
+.cursor/
+.copilot/
+.aider*
+.ai/
+*.claude
+# Gradle
+.gradle/
+.kotlin/
+build/
+**/build/
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+# Local configuration
+local.properties
+# IntelliJ
+.idea/
+*.iml
+# OS
+.DS_Store
+Thumbs.db
