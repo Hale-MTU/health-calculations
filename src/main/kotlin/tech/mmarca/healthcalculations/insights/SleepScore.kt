@@ -98,6 +98,17 @@ data class OvernightHrvInput(
     val baselineRmssdMs: Double,
 )
 
+/**
+ * One night's HRV input, or null when it cannot be used: the recovery pillar
+ * needs both the night's RMSSD and a positive baseline (the median of the
+ * nights before).
+ */
+fun overnightHrvInput(rmssdMs: Double?, baselineRmssdMs: Double?): OvernightHrvInput? {
+    val rmssd = rmssdMs ?: return null
+    val baseline = baselineRmssdMs?.takeIf { it > 0.0 } ?: return null
+    return OvernightHrvInput(rmssdMs = rmssd, baselineRmssdMs = baseline)
+}
+
 /** Overnight HRV inputs: RMSSD averaged inside each night, baseline the median of prior nights. */
 fun overnightHrvInputsByDate(
     sessions: List<SleepData>,

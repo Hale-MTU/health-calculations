@@ -124,4 +124,12 @@ class SleepScoreDateTest {
             ),
         )
     }
+
+    @Test
+    fun `a night's HRV counts only with a positive baseline`() {
+        assertEquals(OvernightHrvInput(rmssdMs = 42.0, baselineRmssdMs = 40.0), overnightHrvInput(42.0, 40.0))
+        assertEquals(null, overnightHrvInput(null, 40.0))
+        assertEquals(null, overnightHrvInput(42.0, null))
+        assertEquals(null, overnightHrvInput(42.0, 0.0))
+    }
 }
