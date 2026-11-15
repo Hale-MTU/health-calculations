@@ -94,4 +94,13 @@ class DailyHeartRateEstimatesTest {
         assertEquals(90.0, timeWeightedMeanHeartRate(listOf(t(0) to 90L))!!, 0.0)
         assertNull(timeWeightedMeanHeartRate(emptyList()))
     }
+
+    @Test
+    fun `with active windows the mean leaves a pause out`() {
+        val t = { seconds: Long -> Instant.ofEpochSecond(seconds) }
+        // 0-60 s at 100 bpm, then 60-120 s at a mean of 150, of which 60-90 s is a pause.
+        val samples = listOf(t(0) to 100L, t(60) to 100L, t(120) to 200L)
+        val windows = listOf(CardioLoadTimeWindow(t(0), t(60)), CardioLoadTimeWindow(t(90), t(120)))
+        assertEquals((100.0 * 60 + 150.0 * 30) / 90, timeWeightedMeanHeartRate(samples, windows)!!, 1e-9)
+    }
 }

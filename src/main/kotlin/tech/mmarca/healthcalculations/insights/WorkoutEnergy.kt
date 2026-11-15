@@ -156,11 +156,12 @@ object KeytelHeartRate {
  * Climbing is not counted: a total ascent does not give the grade of each stretch.
  */
 object AcsmDistanceOnFoot {
-    private const val WalkingMlPerKgMetre = 0.1
-    private const val RunningMlPerKgMetre = 0.2
+    internal const val RestingMlPerKgMinute = 3.5
+    internal const val WalkingMlPerKgMetre = 0.1
+    internal const val RunningMlPerKgMetre = 0.2
     private const val KcalPerLitreOxygen = 4.9
-    private val WalkingPaceMetresPerMinute = 50.0..100.0
-    private const val MinRunningPaceMetresPerMinute = 134.0
+    internal val WalkingPaceMetresPerMinute = 50.0..100.0
+    internal const val MinRunningPaceMetresPerMinute = 134.0
 
     fun netKcal(exerciseType: Int, distanceMeters: Double, durationMinutes: Double, weightKg: Double): Double? {
         if (!(distanceMeters > 0.0) || !(durationMinutes > 0.0)) return null

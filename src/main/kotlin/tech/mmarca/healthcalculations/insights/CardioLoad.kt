@@ -162,6 +162,28 @@ fun calculateCardioLoad(
     }
 }
 
+/**
+ * One workout's training impulse: Banister's TRIMP ([banisterWeighting]) over
+ * the workout's [activeWindows] (its time without pauses), each pair of
+ * readings at their mean for the time it shares with the windows, the same sum
+ * as [calculateCardioLoad] makes over a day's activities. No pair further apart
+ * than [MaxHeartRateSampleGapMinutes] counts. Unlike the day's score it is not
+ * rounded and has no movement fallback.
+ *
+ * Null without windows, without a reserve ([maxHeartRateBpm] not above
+ * [restingHeartRateBpm]), or when no pair of readings counts.
+ */
+fun workoutTrimp(
+    samples: List<HeartRateSample>,
+    restingHeartRateBpm: Long,
+    maxHeartRateBpm: Long,
+    activeWindows: List<CardioLoadTimeWindow>,
+    sex: BiologicalSex?,
+): Double? {
+    if (activeWindows.isEmpty()) return null
+    return calculateTrimp(samples, restingHeartRateBpm, maxHeartRateBpm, activeWindows, sex)?.score
+}
+
 private fun calculateTrimp(
     samples: List<HeartRateSample>,
     restingHeartRate: Long,

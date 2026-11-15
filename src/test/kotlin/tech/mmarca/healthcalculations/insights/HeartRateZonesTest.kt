@@ -72,6 +72,20 @@ class HeartRateZonesTest {
             time,
         )
     }
+
+    @Test
+    fun `with active windows a pause counts for no time`() {
+        val basis = HeartRateZones.Basis(maxBpm = 200)
+        val start = Instant.parse("2026-11-12T10:00:00Z")
+        fun at(seconds: Long, bpm: Long) = HeartRateSample(start.plusSeconds(seconds), bpm, "test")
+        // Paused from 20 s to 50 s: the 60 s at 130 bpm count only their 30 active seconds.
+        val windows = listOf(
+            CardioLoadTimeWindow(start, start.plusSeconds(20)),
+            CardioLoadTimeWindow(start.plusSeconds(50), start.plusSeconds(120)),
+        )
+        val time = HeartRateZones.timeInZones(listOf(at(0, 130), at(60, 130)), basis.boundsBpm, windows)
+        assertEquals(listOf(Duration.ZERO, Duration.ZERO, Duration.ofSeconds(30), Duration.ZERO, Duration.ZERO), time)
+    }
 }
 
 class HeartRateZoneBasisTest {

@@ -2,10 +2,12 @@ package tech.mmarca.healthcalculations.insights
 
 import java.time.Instant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import tech.mmarca.healthcalculations.model.DailySteps
 import tech.mmarca.healthcalculations.model.HeartRateSample
+import tech.mmarca.healthcalculations.preferences.BiologicalSex
 
 class CardioLoadTest {
     private val day = java.time.LocalDate.of(2026, 8, 10)
@@ -169,5 +171,24 @@ class CardioLoadTest {
         assertEquals(67.7, load(tech.mmarca.healthcalculations.preferences.BiologicalSex.FEMALE), 0.1)
         // No recorded sex: the mean of both weightings, (60.8 + 67.7) / 2.
         assertEquals(64.2, load(null), 0.1)
+    }
+
+    @Test
+    fun `a workout's TRIMP counts each pair at its mean, and a pause counts nothing`() {
+        val samples = listOf(
+            HeartRateSample(workoutStart, 120, source = ""),
+            HeartRateSample(workoutStart.plusSeconds(60), 140, source = ""),
+        )
+        val whole = listOf(CardioLoadTimeWindow(workoutStart, workoutStart.plusSeconds(60)))
+        // One minute at 130 bpm: reserve 70 / 120, times 0.64 e^(1.92 reserve).
+        assertEquals(1.14421, workoutTrimp(samples, 60, 180, whole, BiologicalSex.MALE)!!, 1e-5)
+        // A 20 s pause in the middle: two thirds of the minute count.
+        val paused = listOf(
+            CardioLoadTimeWindow(workoutStart, workoutStart.plusSeconds(20)),
+            CardioLoadTimeWindow(workoutStart.plusSeconds(40), workoutStart.plusSeconds(60)),
+        )
+        assertEquals(1.14421 * 2 / 3, workoutTrimp(samples, 60, 180, paused, BiologicalSex.MALE)!!, 1e-5)
+        assertNull(workoutTrimp(samples, 60, 180, emptyList(), BiologicalSex.MALE))
+        assertNull(workoutTrimp(samples, 180, 180, whole, BiologicalSex.MALE))
     }
 }

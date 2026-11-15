@@ -75,25 +75,48 @@ internal fun overlapMinutes(
 internal const val MaxHeartRateSampleGapMinutes = 5.0
 
 /**
+ * The milliseconds between two neighbouring readings at [from] and [to] that
+ * count: none when they are more than [MaxHeartRateSampleGapMinutes] apart;
+ * with [activeWindows], only the part inside them, so a workout's pauses count
+ * nothing. With no windows, the whole span.
+ */
+internal fun countedMillisBetween(
+    from: Instant,
+    to: Instant,
+    activeWindows: List<CardioLoadTimeWindow> = emptyList(),
+): Long {
+    val span = Duration.between(from, to).toMillis()
+    if (span <= 0L || span > MaxHeartRateSampleGapMinutes * 60_000.0) return 0L
+    if (activeWindows.isEmpty()) return span
+    return activeWindows.sumOf { window ->
+        Duration.between(maxOf(from, window.start), minOf(to, window.end)).toMillis().coerceAtLeast(0L)
+    }
+}
+
+/**
  * The mean heart rate over time: each pair of neighbouring readings counts
- * with its mean for the time between them, unless that is more than
- * [MaxHeartRateSampleGapMinutes]. Readings at uneven intervals therefore do not
- * skew it, which a plain average of the readings does. Keytel's equation
- * ([KeytelHeartRate]) is linear in heart rate, so this mean gives the same
- * energy as adding it up reading by reading.
+ * with its mean for the time between them ([countedMillisBetween]: not past
+ * [MaxHeartRateSampleGapMinutes], and with [activeWindows] only inside them).
+ * Readings at uneven intervals therefore do not skew it, which a plain average
+ * of the readings does. Keytel's equation ([KeytelHeartRate]) is linear in
+ * heart rate, so this mean gives the same energy as adding it up reading by
+ * reading.
  *
  * The plain average when no pair counts (one reading, or only gaps); null without readings.
  */
-fun timeWeightedMeanHeartRate(samples: List<Pair<Instant, Long>>): Double? {
+fun timeWeightedMeanHeartRate(
+    samples: List<Pair<Instant, Long>>,
+    activeWindows: List<CardioLoadTimeWindow> = emptyList(),
+): Double? {
     if (samples.isEmpty()) return null
     val ordered = samples.sortedBy { it.first }
     var weighted = 0.0
-    var minutes = 0.0
+    var millis = 0L
     for ((first, second) in ordered.zipWithNext()) {
-        val span = Duration.between(first.first, second.first).toMillis() / 60_000.0
-        if (span <= 0.0 || span > MaxHeartRateSampleGapMinutes) continue
+        val span = countedMillisBetween(first.first, second.first, activeWindows)
+        if (span == 0L) continue
         weighted += (first.second + second.second) / 2.0 * span
-        minutes += span
+        millis += span
     }
-    return if (minutes > 0.0) weighted / minutes else ordered.map { it.second }.average()
+    return if (millis > 0L) weighted / millis else ordered.map { it.second }.average()
 }
