@@ -26,9 +26,9 @@ Do not break these without an explicit decision.
   implements (`CaffeineCatalog`), never as a copy.
 - **Sourced or labelled.** Each formula names its source in the KDoc: the paper, the guideline
   or the standard. A threshold with no published source says "app heuristic".
-- **Unknown is not zero.** A calculation without enough input returns null, a `NoData` result
-  or a confidence that says so; it never returns NaN or a default that reads as a measurement.
-  `stats/Stats.kt` holds the averages that keep that contract.
+- **Unknown is not zero.** A calculation without enough input says so (null, a `NoData` result
+  or a confidence), not NaN or a default that reads as a measurement. The averages in
+  `stats/Stats.kt` keep that contract; `median` throws on no values, so its caller decides.
 - **Behaviour changes reach both apps together.** A change here is released by moving the
   submodule in OpenVitals and OpenWatch. Say in the pull request what changes for the user, so
   both apps' changelogs can say it.
