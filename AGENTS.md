@@ -27,8 +27,8 @@ Do not break these without an explicit decision.
 - **Sourced or labelled.** Each formula names its source in the KDoc: the paper, the guideline
   or the standard. A threshold with no published source says "app heuristic".
 - **Unknown is not zero.** A calculation without enough input says so (null, a `NoData` result
-  or a confidence), not NaN or a default that reads as a measurement. The averages in
-  `stats/Stats.kt` keep that contract; `median` throws on no values, so its caller decides.
+  or a confidence), not NaN or a default that reads as a measurement. The averages and the
+  medians in `stats/Stats.kt` keep that contract: no values give null.
 - **Behaviour changes reach both apps together.** A change here is released by moving the
   submodule in OpenVitals and OpenWatch. Say in the pull request what changes for the user, so
   both apps' changelogs can say it.

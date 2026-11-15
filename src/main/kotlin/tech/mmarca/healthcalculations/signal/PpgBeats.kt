@@ -3,7 +3,7 @@ package tech.mmarca.healthcalculations.signal
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
-import tech.mmarca.healthcalculations.stats.median
+import tech.mmarca.healthcalculations.stats.medianOrNull
 
 /**
  * Beat times from a raw photoplethysmogram (PPG), for [HrvRmssd].
@@ -58,7 +58,7 @@ object PpgBeats {
         val grid = resample(timesMillis, values) ?: return null
         val filtered = bandPass(grid)
         val first = peaks(filtered, FIRST_PASS_MIN_MILLIS) ?: return null
-        val typical = median(List(first.size - 1) { first[it + 1] - first[it] })
+        val typical = checkNotNull(List(first.size - 1) { first[it + 1] - first[it] }.medianOrNull())
         val second = peaks(filtered, RHYTHM_SHARE * typical) ?: return null
         val edge = (EDGE_MILLIS / STEP_MILLIS)
         return second.filter { it > edge && it < filtered.size - 1 - edge }

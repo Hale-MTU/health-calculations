@@ -4,7 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
-import tech.mmarca.healthcalculations.stats.median
+import tech.mmarca.healthcalculations.stats.medianOrNull
 
 /** The three overnight signals the cycle screen lines up against the cycle day. */
 enum class NightlySignal {
@@ -189,7 +189,7 @@ object NightlyVitalsCalculator {
             NightlyPoint(
                 cycleDay = ChronoUnit.DAYS.between(cycleStart, night.date).toInt() + 1,
                 date = night.date,
-                value = median(readings.map { it.value }),
+                value = checkNotNull(readings.map { it.value }.medianOrNull()),
                 sampleCount = readings.size,
                 isDailyValue = chosen !in night.inside,
             )

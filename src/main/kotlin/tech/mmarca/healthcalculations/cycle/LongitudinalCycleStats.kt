@@ -2,7 +2,7 @@ package tech.mmarca.healthcalculations.cycle
 
 import java.time.LocalDate
 import kotlin.math.abs
-import tech.mmarca.healthcalculations.stats.median
+import tech.mmarca.healthcalculations.stats.medianOrNull
 
 /** One bar of the variability view. */
 data class LongitudinalCycleItem(
@@ -61,11 +61,9 @@ object LongitudinalCycleStatsCalculator {
             totalCyclesCount = items.size,
             completedCyclesCount = items.count { !it.isCurrent },
             excludedCyclesCount = items.count { it.isExcluded },
-            medianDays = completedLengths.median(),
+            medianDays = completedLengths.medianOrNull(),
             meanDays = completedLengths.takeIf { it.isNotEmpty() }?.average(),
             items = items.reversed(),
         )
     }
-
-    private fun List<Int>.median(): Double? = if (isEmpty()) null else median(map(Int::toDouble))
 }
