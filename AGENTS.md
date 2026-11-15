@@ -15,7 +15,7 @@ Do not break these without an explicit decision.
 
 - **Plain Kotlin, no dependency.** The main source set uses the Kotlin standard library and
   `java.*` only: no Android, no Health Connect, no coroutines, no I/O. The Wear OS app and
-  `:wearlink` take the same code as the phones, and every calculation runs in a JVM test.
+  `:wearlink` take the same code as the phones, and every calculation can be tested on a plain JVM.
 - **Health Connect's constants are copied, all of them.** `model/ExerciseSessionRecord.kt` and
   `model/ExerciseSegment.kt` hold every exercise and segment type under Health Connect's names
   and values. Each app's `ExerciseTypeMirrorTest` compares them with the real classes, both

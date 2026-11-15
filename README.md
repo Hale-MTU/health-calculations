@@ -7,7 +7,7 @@ from its raw sensors. One copy, so a formula gives the same number in both apps.
 
 Plain Kotlin on the JDK, with no dependency beyond the Kotlin standard library: no Android, no
 Health Connect, no network. The phone apps, OpenWatch's `:wearlink` and the Wear OS app all
-take the same code, and every calculation is tested on the JVM.
+take the same code, and its tests run on a plain JVM.
 
 ## What is in it
 
