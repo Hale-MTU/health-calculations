@@ -12,7 +12,7 @@ import tech.mmarca.healthcalculations.preferences.BiologicalSex
  */
 
 /** A maximum heart rate. [isMeasured] is true for one the user entered or a believable observed one. */
-internal data class DailyMaxHeartRate(val bpm: Long, val isMeasured: Boolean)
+data class DailyMaxHeartRate(val bpm: Long, val isMeasured: Boolean)
 
 /**
  * The maximum heart rate for a day's estimates, in this order:
@@ -24,7 +24,7 @@ internal data class DailyMaxHeartRate(val bpm: Long, val isMeasured: Boolean)
  *
  * Null when there is neither an entered nor an observed maximum.
  */
-internal fun dailyMaxHeartRate(
+fun dailyMaxHeartRate(
     restingHeartRate: Long,
     observedMaxHeartRate: Long?,
     ageYears: Int?,
