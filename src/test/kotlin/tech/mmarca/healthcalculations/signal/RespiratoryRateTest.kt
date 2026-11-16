@@ -112,5 +112,8 @@ class RespiratoryRateTest {
         val weak = RespiratoryRate.Window(RespiratoryRate.Estimate(14.3, 0.35), null)
         assertNull(weak.value)
         assertEquals(0, weak.routes)
+        val signalOnly = RespiratoryRate.Window(null, RespiratoryRate.Estimate(12.0, RespiratoryRate.MIN_SINGLE_ROUTE_SHARE))
+        assertEquals(12.0, signalOnly.value!!, 1e-9)
+        assertEquals(1, signalOnly.routes)
     }
 }

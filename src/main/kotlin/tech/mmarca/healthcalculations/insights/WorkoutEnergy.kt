@@ -157,25 +157,35 @@ object KeytelHeartRate {
  */
 object AcsmDistanceOnFoot {
     internal const val RestingMlPerKgMinute = 3.5
-    internal const val WalkingMlPerKgMetre = 0.1
-    internal const val RunningMlPerKgMetre = 0.2
+    private const val WalkingMlPerKgMetre = 0.1
+    private const val RunningMlPerKgMetre = 0.2
     private const val KcalPerLitreOxygen = 4.9
-    internal val WalkingPaceMetresPerMinute = 50.0..100.0
+    private val WalkingPaceMetresPerMinute = 50.0..100.0
     internal const val MinRunningPaceMetresPerMinute = 134.0
 
     fun netKcal(exerciseType: Int, distanceMeters: Double, durationMinutes: Double, weightKg: Double): Double? {
         if (!(distanceMeters > 0.0) || !(durationMinutes > 0.0)) return null
         val pace = distanceMeters / durationMinutes
         val mlPerKgMetre = when (exerciseType) {
-            ExerciseSessionRecord.EXERCISE_TYPE_WALKING ->
-                WalkingMlPerKgMetre.takeIf { pace in WalkingPaceMetresPerMinute }
+            ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> netMlPerKgMetre(pace, running = false)
             ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-            ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL ->
-                RunningMlPerKgMetre.takeIf { pace > MinRunningPaceMetresPerMinute }
+            ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> netMlPerKgMetre(pace, running = true)
             else -> null
         } ?: return null
         return mlPerKgMetre * distanceMeters * weightKg / 1000.0 * KcalPerLitreOxygen
     }
+
+    /**
+     * The net oxygen cost on the level, ml/kg per metre, at [pace] m/min: walking's within the
+     * table's walking pace, running's above its running pace. Null outside them, the 100 to
+     * 134 m/min between included, where the table gives no equation.
+     */
+    internal fun netMlPerKgMetre(pace: Double, running: Boolean): Double? =
+        if (running) {
+            RunningMlPerKgMetre.takeIf { pace > MinRunningPaceMetresPerMinute }
+        } else {
+            WalkingMlPerKgMetre.takeIf { pace in WalkingPaceMetresPerMinute }
+        }
 }
 
 private const val MinutesPerDay = 24.0 * 60.0

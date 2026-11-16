@@ -102,7 +102,8 @@ internal fun countedMillisBetween(
  * heart rate, so this mean gives the same energy as adding it up reading by
  * reading.
  *
- * The plain average when no pair counts (one reading, or only gaps); null without readings.
+ * The plain average when no pair counts (one reading, or only gaps), with
+ * [activeWindows] of the readings inside them only; null without such readings.
  */
 fun timeWeightedMeanHeartRate(
     samples: List<Pair<Instant, Long>>,
@@ -118,5 +119,11 @@ fun timeWeightedMeanHeartRate(
         weighted += (first.second + second.second) / 2.0 * span
         millis += span
     }
-    return if (millis > 0L) weighted / millis else ordered.map { it.second }.average()
+    if (millis > 0L) return weighted / millis
+    val counted = if (activeWindows.isEmpty()) {
+        ordered
+    } else {
+        ordered.filter { (time, _) -> activeWindows.any { !time.isBefore(it.start) && !time.isAfter(it.end) } }
+    }
+    return counted.takeIf { it.isNotEmpty() }?.map { it.second }?.average()
 }

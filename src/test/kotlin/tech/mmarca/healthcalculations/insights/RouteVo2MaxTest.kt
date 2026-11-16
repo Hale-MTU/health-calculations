@@ -20,6 +20,22 @@ class RouteVo2MaxTest {
         }
     }
 
+    /** One fix a second at [metresPerMinute] northwards, swaying [swayMetres] east and back every second. */
+    private fun jitteryRoute(minutes: Int, metresPerMinute: Double, swayMetres: Double): List<ExerciseRoutePoint> {
+        val degreesPerMetre = 180.0 / (Math.PI * 6_371_000.0)
+        return (0..minutes * 60).map { second ->
+            val east = if (second % 2 == 0) 0.0 else swayMetres
+            ExerciseRoutePoint(
+                start.plusSeconds(second.toLong()),
+                second * metresPerMinute / 60.0 * degreesPerMetre,
+                11.0 + east * degreesPerMetre,
+                null,
+                null,
+                null,
+            )
+        }
+    }
+
     private fun steady(minutes: Int, bpm: Long) =
         (0..minutes * 60).map { second -> HeartRateSample(start.plusSeconds(second.toLong()), bpm, "test") }
 
@@ -33,17 +49,28 @@ class RouteVo2MaxTest {
     }
 
     @Test
-    fun `a hike at walking pace takes the walking cost`() {
+    fun `a walk at walking pace takes the walking cost`() {
         // 80 m/min, reserve (119 - 50) / 140: 0.1 x 80 / reserve + 3.5.
         val vo2 = estimateRouteVo2Max(
-            ExerciseSessionRecord.EXERCISE_TYPE_HIKING, route(6, 80.0), steady(6, 119), whole, 50, 190,
+            ExerciseSessionRecord.EXERCISE_TYPE_WALKING, route(6, 80.0), steady(6, 119), whole, 50, 190,
         )
         assertEquals(19.7319, vo2!!, 1e-4)
     }
 
     @Test
+    fun `a walk faster than walking pace takes the running cost only above running pace`() {
+        val walk = ExerciseSessionRecord.EXERCISE_TYPE_WALKING
+        // 120 m/min: between the ACSM's walking and running pace, no equation.
+        assertNull(estimateRouteVo2Max(walk, route(6, 120.0), steady(6, 134), whole, 50, 190))
+        assertEquals(70.1667, estimateRouteVo2Max(walk, route(6, 200.0), steady(6, 134), whole, 50, 190)!!, 1e-4)
+        // A run below running pace has none either.
+        assertNull(estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, route(6, 120.0), steady(6, 134), whole, 50, 190))
+    }
+
+    @Test
     fun `another sport, too few minutes or minutes outside the reserve give none`() {
         assertNull(estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_BIKING, route(6, 200.0), steady(6, 134), whole, 50, 190))
+        assertNull(estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_HIKING, route(6, 80.0), steady(6, 119), whole, 50, 190))
         assertNull(estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, route(4, 200.0), steady(4, 134), whole, 50, 190))
         // 60 bpm is 7 % of the reserve: below 40 %, every minute is left out.
         assertNull(estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, route(6, 200.0), steady(6, 60), whole, 50, 190))
@@ -62,5 +89,23 @@ class RouteVo2MaxTest {
             estimateRouteVo2Max(ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, route(8, 200.0), steady(8, 134), whole, 50, 190)!!,
             1e-4,
         )
+    }
+
+    @Test
+    fun `dense fixes that sway do not make the run faster`() {
+        // 5 m of sway every second would add about 600 m a minute; fixes 10 s apart leave it out.
+        val vo2 = estimateRouteVo2Max(
+            ExerciseSessionRecord.EXERCISE_TYPE_RUNNING, jitteryRoute(6, 200.0, 5.0), steady(6, 134), whole, 50, 190,
+        )
+        assertEquals(70.1667, vo2!!, 1e-4)
+    }
+
+    @Test
+    fun `a gap in the route is not a minute`() {
+        // Fixes each minute, then one ten minutes later: the gap's stretch is left out, five minutes remain.
+        val points = route(5, 200.0) + route(15, 200.0).last()
+        val run = ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
+        assertEquals(70.1667, estimateRouteVo2Max(run, points, steady(15, 134), whole, 50, 190)!!, 1e-4)
+        assertNull(estimateRouteVo2Max(run, route(4, 200.0) + route(15, 200.0).last(), steady(15, 134), whole, 50, 190))
     }
 }

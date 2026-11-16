@@ -103,4 +103,14 @@ class DailyHeartRateEstimatesTest {
         val windows = listOf(CardioLoadTimeWindow(t(0), t(60)), CardioLoadTimeWindow(t(90), t(120)))
         assertEquals((100.0 * 60 + 150.0 * 30) / 90, timeWeightedMeanHeartRate(samples, windows)!!, 1e-9)
     }
+
+    @Test
+    fun `with active windows the fallback averages only the readings inside them`() {
+        val t = { seconds: Long -> Instant.ofEpochSecond(seconds) }
+        // Readings ten minutes apart: no pair counts.
+        val samples = listOf(t(0) to 100L, t(600) to 160L)
+        assertEquals(100.0, timeWeightedMeanHeartRate(samples, listOf(CardioLoadTimeWindow(t(0), t(60))))!!, 0.0)
+        assertNull(timeWeightedMeanHeartRate(samples, listOf(CardioLoadTimeWindow(t(100), t(200)))))
+        assertEquals(130.0, timeWeightedMeanHeartRate(samples)!!, 0.0)
+    }
 }
