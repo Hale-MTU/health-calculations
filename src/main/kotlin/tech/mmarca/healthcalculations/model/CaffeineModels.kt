@@ -66,6 +66,7 @@ data class CaffeineInsights(
     val safeSleepStreak: Int = 0,
     /** The level at bedtime on the period's last night. */
     val bedtimeMg: Double = 0.0,
+    /** The threshold the nights were judged against: [tech.mmarca.healthcalculations.preferences.CaffeinePreferences.effectiveSleepThresholdMg], not the one entered. */
     val sleepThresholdMg: Int = 0,
     val bedtime: LocalTime = LocalTime.MIDNIGHT,
     val timeToThresholdMinutes: Long? = null,

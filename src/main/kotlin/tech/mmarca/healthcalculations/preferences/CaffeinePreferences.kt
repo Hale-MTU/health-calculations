@@ -47,21 +47,31 @@ data class CaffeinePreferences(
      * Age: no factor. Young and elderly men eliminate caffeine alike (Blanchard and Sawers, J
      * Pharmacokinet Biopharm 1983;11(2):109-126, doi:10.1007/BF01061844), and no later study
      * found an age effect in adults. For under-18s no source was found either way: treating them
-     * as adults is an app choice. [bodyProfile] is kept so the apps' calls stay the same; it no
-     * longer moves the result.
+     * as adults is an app choice.
      *
      * Liver impairment (1.8) and a medication interaction (1.4): app heuristic, a floor rather
      * than a typical value. Alcoholic liver disease has been measured at 60 and 168 h (Statland
      * and Demas, Am J Clin Pathol 1980;73(3):390-393, doi:10.1093/ajcp/73.3.390), and a strong
      * CYP1A2 inhibitor lengthens it many times over; the result is capped at
-     * [MaxEffectiveHalfLifeMinutes].
+     * [MaxEffectiveHalfLifeMinutes] ([isEffectiveHalfLifeCapped]).
+     *
+     * Sleep sensitivity and habituation change how much caffeine disturbs sleep, not how fast it
+     * leaves: they move [effectiveSleepThresholdMg], not this.
      */
-    fun effectiveHalfLifeMinutes(@Suppress("UNUSED_PARAMETER") bodyProfile: BodyProfile): Int {
-        val base = halfLifeMinutes.toDouble()
-        val multiplier = listOf(
-            sleepSensitivity.halfLifeMultiplier,
+    fun effectiveHalfLifeMinutes(): Int =
+        uncappedHalfLifeMinutes().roundToInt().coerceIn(MinHalfLifeMinutes, MaxEffectiveHalfLifeMinutes)
+
+    /**
+     * Whether the factors would take the half-life past [MaxEffectiveHalfLifeMinutes] or under
+     * [MinHalfLifeMinutes], so [effectiveHalfLifeMinutes] shows the bound and a further factor
+     * changes nothing.
+     */
+    fun isEffectiveHalfLifeCapped(): Boolean =
+        uncappedHalfLifeMinutes().roundToInt() !in MinHalfLifeMinutes..MaxEffectiveHalfLifeMinutes
+
+    private fun uncappedHalfLifeMinutes(): Double =
+        halfLifeMinutes * listOf(
             alcoholUse.halfLifeMultiplier,
-            caffeineHabituation.halfLifeMultiplier,
             cyp1a2Genotype.halfLifeMultiplier,
             ahrGenotype.halfLifeMultiplier,
             hormonalStatus.halfLifeMultiplier,
@@ -69,10 +79,19 @@ data class CaffeinePreferences(
             if (liverImpairment) 1.8 else 1.0,
             if (medicationInteraction) 1.4 else 1.0,
         ).fold(1.0) { product, factor -> product * factor }
-        return (base * multiplier)
+
+    /**
+     * The milligrams at bedtime above which caffeine counts against sleep: [sleepThresholdMg]
+     * scaled by [sleepSensitivity] and [caffeineHabituation], within [MinSleepThresholdMg] and
+     * [MaxSleepThresholdMg]. The same dose disturbs sleep more in people sensitive to it, a trait
+     * tied to the adenosine A2A receptor gene, ADORA2A (Rétey et al., Clin Pharmacol Ther
+     * 2007;81(5):692-698, doi:10.1038/sj.clpt.6100102), and tolerance blunts the effect without
+     * speeding elimination. The sizes of both factors: app heuristic, no published source.
+     */
+    fun effectiveSleepThresholdMg(): Int =
+        (sleepThresholdMg * sleepSensitivity.thresholdFactor * caffeineHabituation.thresholdFactor)
             .roundToInt()
-            .coerceIn(MinHalfLifeMinutes, MaxEffectiveHalfLifeMinutes)
-    }
+            .coerceIn(MinSleepThresholdMg, MaxSleepThresholdMg)
 
     companion object {
         /**
@@ -96,14 +115,15 @@ data class CaffeinePreferences(
 }
 
 /**
- * App heuristic, no published source. Sensitivity to caffeine's effect on sleep is a matter of
- * the adenosine receptor, not of elimination; the multiplier stands in for a lower threshold.
+ * How strongly caffeine disturbs this person's sleep: a factor on the sleep threshold
+ * ([CaffeinePreferences.effectiveSleepThresholdMg]). The values are the inverse of the
+ * half-life multipliers they replace (0.9, 1.2, 1.35): app heuristic, no published source.
  */
-enum class CaffeineSleepSensitivity(val halfLifeMultiplier: Double) {
-    LOW(0.9),
+enum class CaffeineSleepSensitivity(val thresholdFactor: Double) {
+    LOW(1.1),
     NORMAL(1.0),
-    HIGH(1.2),
-    INSOMNIA(1.35),
+    HIGH(0.83),
+    INSOMNIA(0.74),
 }
 
 /** App heuristic, no published source. */
@@ -113,11 +133,16 @@ enum class CaffeineAlcoholUse(val halfLifeMultiplier: Double) {
     REGULAR(1.15),
 }
 
-/** App heuristic, no published source: tolerance blunts the effect more than it speeds elimination. */
-enum class CaffeineHabituation(val halfLifeMultiplier: Double) {
-    LOW(1.1),
+/**
+ * Tolerance from habitual use: a factor on the sleep threshold
+ * ([CaffeinePreferences.effectiveSleepThresholdMg]), since tolerance blunts the effect rather
+ * than speeding elimination. The values are the inverse of the half-life multipliers they
+ * replace (1.1, 0.95): app heuristic, no published source.
+ */
+enum class CaffeineHabituation(val thresholdFactor: Double) {
+    LOW(0.91),
     MODERATE(1.0),
-    HIGH(0.95),
+    HIGH(1.05),
 }
 
 /** CYP1A2 or AHR metaboliser type. App heuristic, no published source for the multipliers. */
