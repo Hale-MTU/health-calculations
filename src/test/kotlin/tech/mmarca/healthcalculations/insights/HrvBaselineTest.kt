@@ -70,6 +70,40 @@ class HrvBaselineTest {
         assertEquals(emptyMap<LocalDate, Double>(), nightRmssdByDate(listOf(night), listOf(sample("2026-11-10T12:00:00Z", 50.0)), zone))
     }
 
+    @Test
+    fun `a day with only a nap has no night`() {
+        val nap = session("nap", "2026-11-10T14:00:00Z", "2026-11-10T16:00:00Z")
+        val samples = listOf(sample("2026-11-10T14:10:00Z", 30.0), sample("2026-11-10T15:50:00Z", 30.0))
+        assertEquals(emptyMap<LocalDate, Double>(), nightRmssdByDate(listOf(nap), samples, zone))
+    }
+
+    @Test
+    fun `a night in two pieces is one night`() {
+        val first = session("first", "2026-11-09T22:00:00Z", "2026-11-10T01:00:00Z")
+        val second = session("second", "2026-11-10T01:30:00Z", "2026-11-10T06:00:00Z")
+        val samples = listOf(sample("2026-11-09T23:00:00Z", 40.0), sample("2026-11-10T05:00:00Z", 60.0))
+
+        assertEquals(mapOf(LocalDate.parse("2026-11-10") to 50.0), nightRmssdByDate(listOf(first, second), samples, zone))
+    }
+
+    @Test
+    fun `readings from the first hour only do not stand for the night, one reading alone does`() {
+        val night = session("night", "2026-11-09T22:00:00Z", "2026-11-10T06:00:00Z")
+        val firstHour = listOf(sample("2026-11-09T22:05:00Z", 40.0), sample("2026-11-09T22:55:00Z", 40.0))
+        assertEquals(emptyMap<LocalDate, Double>(), nightRmssdByDate(listOf(night), firstHour, zone))
+        // A source that writes one value for the whole night.
+        val one = listOf(sample("2026-11-10T06:00:00Z", 45.0))
+        assertEquals(mapOf(LocalDate.parse("2026-11-10") to 45.0), nightRmssdByDate(listOf(night), one, zone))
+    }
+
+    @Test
+    fun `a baseline without a spread reads nothing, and a very even one reads with the night-to-night noise`() {
+        assertNull(HrvBaseline(lnRmssdMean = ln(50.0), lnRmssdSd = 0.0).standardDeviationsFromMean(40.0))
+        // A spread of 0.01 is under the noise, 2.1 % of ln(50): the noise is the unit.
+        val even = HrvBaseline(lnRmssdMean = ln(50.0), lnRmssdSd = 0.01)
+        assertEquals(-1.0, even.standardDeviationsFromMean(50.0 * exp(-0.021 * ln(50.0)))!!, 1e-12)
+    }
+
     private fun session(id: String, start: String, end: String): SleepData {
         val from = Instant.parse(start)
         val to = Instant.parse(end)

@@ -941,13 +941,59 @@ class BodyEnergyTimelineTest {
         ).points.sumOf { it.charge }
 
         val withoutHrv = chargedWith(emptyList())
-        // Low before midnight only: the night's mean is low, every bucket after midnight charges less.
-        assertEquals(withoutHrv * 0.75, chargedWith(hrvSamples(bedtime, dayStart, 30.0)), 1e-9)
+        // 20 ms before midnight, 50 ms after: the night's mean is 42.5 ms, 1.6 deviations below,
+        // so every bucket after midnight charges less. The hours after midnight alone are neutral.
+        val lowEvening = hrvSamples(bedtime, dayStart, 20.0) + hrvSamples(dayStart, wake, 50.0)
+        assertEquals(withoutHrv * 0.90, chargedWith(lowEvening), 1e-9)
+        assertEquals(withoutHrv, chargedWith(hrvSamples(dayStart, wake, 50.0)), 1e-9)
         // A single low 5-minute stretch in a normal night leaves the night's mean inside the band.
         val night = hrvSamples(bedtime, wake, 50.0).map { sample ->
             if (sample.time == dayStart.plus(Duration.ofHours(3))) sample.copy(rmssdMs = 20.0) else sample
         }
         assertEquals(withoutHrv, chargedWith(night), 1e-9)
+    }
+
+    @Test
+    fun `a night in two pieces is valued as one`() {
+        val wake = dayStart.plus(Duration.ofHours(7))
+        val pieces = listOf(
+            sleep(dayStart, dayStart.plus(Duration.ofHours(2))).copy(id = "first"),
+            sleep(dayStart.plus(Duration.ofMinutes(150)), wake).copy(id = "second"),
+        )
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun charged(hrv: List<HrvSample>): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = wake,
+                previousEndScore = 10,
+                samples = heartRateSamples(dayStart, wake, bpm = 55),
+                sleepSessions = pieces,
+                restingHeartRateBpm = 58,
+                observedMaxHeartRateBpm = 188,
+                hrvSamples = hrv,
+                hrvBaseline = baseline,
+            )
+        ).points.sumOf { it.charge }
+
+        // Both pieces take the whole night's factor, the shorter first one too.
+        val without = charged(emptyList())
+        val low = charged(hrvSamples(dayStart, wake, 38.0))
+        assertTrue(low < without)
+        val firstPiece = { hrv: List<HrvSample> ->
+            calculateBodyEnergyTimeline(
+                inputs(
+                    now = dayStart.plus(Duration.ofHours(2)),
+                    previousEndScore = 10,
+                    samples = heartRateSamples(dayStart, wake, bpm = 55),
+                    sleepSessions = pieces,
+                    restingHeartRateBpm = 58,
+                    observedMaxHeartRateBpm = 188,
+                    hrvSamples = hrv,
+                    hrvBaseline = baseline,
+                )
+            ).points.sumOf { it.charge }
+        }
+        assertEquals(firstPiece(emptyList()) * 0.75, firstPiece(hrvSamples(dayStart, wake, 38.0)), 1e-9)
     }
 
     @Test

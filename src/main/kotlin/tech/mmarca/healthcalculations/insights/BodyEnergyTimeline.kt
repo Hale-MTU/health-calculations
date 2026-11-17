@@ -284,7 +284,12 @@ fun bodyEnergyCarryOverFloorApplies(previousEndScore: Int?): Boolean =
 data class BodyEnergyTimelineInputs(
     val date: LocalDate,
     val heartRateSamples: List<HeartRateSample>,
-    /** Covering [sleepSessions], the hours of a night before midnight included: a night is valued whole. */
+    /**
+     * Covering [sleepSessions], the hours of a night before midnight included: a
+     * night is valued whole. A night still running is valued by its readings so
+     * far, so its evening may charge by another factor than its morning does on
+     * the next day.
+     */
     val hrvSamples: List<HrvSample> = emptyList(),
     val sleepSessions: List<SleepData> = emptyList(),
     val workouts: List<ExerciseData> = emptyList(),
@@ -382,8 +387,7 @@ fun calculateBodyEnergyTimeline(inputs: BodyEnergyTimelineInputs): BodyEnergyTim
     // One factor per night, not per bucket.
     val qualityFactors = inputs.sleepSessions.associate { it.id to sleepChargeQualityFactor(it) }
     // Each night's HRV against the baseline, one factor per night; naps stay neutral.
-    val hrvChargeMultipliers = nightsRmssd(inputs.sleepSessions, inputs.hrvSamples, inputs.zone).values
-        .associate { night -> night.session.id to hrvChargeMultiplier(inputs.hrvBaseline, night.rmssdMs) }
+    val hrvChargeMultipliers = hrvChargeMultipliersBySession(inputs)
 
     // The day opens where the previous one closed, floored.
     var score = bodyEnergySeedScore(inputs.previousEndScore).toDouble()
@@ -804,46 +808,6 @@ private fun resolveIntensityContext(
         confidence = confidence,
         sex = profile.sex,
     )
-}
-
-private data class RespiratoryFactor(
-    val drainMultiplier: Double,
-    val chargePenalty: Double,
-)
-
-/**
- * How a night's HRV ([nightRmssdByDate]) scales its charge. A night more than
- * one standard deviation below the baseline ([HrvBaseline]) is a meaningful
- * drop, the single-day criterion of Kiviniemi et al. (Eur J Appl Physiol
- * 2007;101(6):743-751, doi:10.1007/s00421-007-0552-2), and charges less; two
- * below, a clearly suppressed night, charges less still. A night above the
- * baseline stays neutral: a rise also comes with functional overreaching (Le
- * Meur et al., Med Sci Sports Exerc 2013;45(11):2061-2071,
- * doi:10.1249/MSS.0b013e3182980125), so it does not read as better recovery.
- * The multipliers and the second step are app heuristics, no published source.
- */
-private fun hrvChargeMultiplier(
-    baseline: HrvBaseline?,
-    rmssdMs: Double,
-): Double {
-    val deviations = baseline?.standardDeviationsFromMean(rmssdMs) ?: return 1.0
-    return when {
-        deviations < -2.0 -> 0.75
-        deviations < -1.0 -> 0.90
-        else -> 1.0
-    }
-}
-
-private fun respiratoryStressFactor(
-    baseline: Double?,
-    average: Double?,
-): RespiratoryFactor {
-    if (baseline == null || average == null) return RespiratoryFactor(1.0, 1.0)
-    return when {
-        average >= baseline + 3.0 -> RespiratoryFactor(drainMultiplier = 1.12, chargePenalty = 1.15)
-        average >= baseline + 1.5 -> RespiratoryFactor(drainMultiplier = 1.05, chargePenalty = 1.06)
-        else -> RespiratoryFactor(1.0, 1.0)
-    }
 }
 
 private fun drainRateForZone(zone: Int): Double =
