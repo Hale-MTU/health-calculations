@@ -36,15 +36,19 @@ data class CaffeinePreferences(
      * doi:10.1002/cpt197824140). The oral contraceptive and pregnancy factors are on
      * [CaffeineHormonalStatus].
      *
-     * Age and weight do not change it. CYP1A2, which clears caffeine, was as active in severe
-     * obesity as in controls (Kvitne et al., Br J Clin Pharmacol 2022;88(9):4121-4133,
-     * doi:10.1111/bcp.15349) and in obese as in lean adolescents (Gade et al., J Clin Pharmacol
-     * 2026;66(6):e70219, doi:10.1002/jcph.70219); obesity widens the volume of distribution
-     * without changing clearance (Abernethy, Todd and Schwartz, Br J Clin Pharmacol
-     * 1985;20(1):61-66, PMID 4027137). Young and elderly men eliminate caffeine alike (Blanchard
-     * and Sawers, J Pharmacokinet Biopharm 1983;11(2):109-126, doi:10.1007/BF01061844); no later
-     * study found an age effect in adults. [bodyProfile] is kept so the apps' calls stay the
-     * same; it no longer moves the result.
+     * Weight: no factor. Clearance is unchanged in obesity: CYP1A2, which clears caffeine, was as
+     * active in severe obesity as in controls (Kvitne et al., Br J Clin Pharmacol
+     * 2022;88(9):4121-4133, doi:10.1111/bcp.15349) and in obese as in lean adolescents (Gade et
+     * al., J Clin Pharmacol 2026;66(6):e70219, doi:10.1002/jcph.70219). The volume of
+     * distribution grows with weight, so the half-life tends to be longer, 7.05 h against 5.40 h,
+     * but not significantly (Abernethy, Todd and Schwartz, Br J Clin Pharmacol 1985;20(1):61-66,
+     * PMID 4027137). No study gives a size to apply; leaving it at 1.0 is an app choice.
+     *
+     * Age: no factor. Young and elderly men eliminate caffeine alike (Blanchard and Sawers, J
+     * Pharmacokinet Biopharm 1983;11(2):109-126, doi:10.1007/BF01061844), and no later study
+     * found an age effect in adults. For under-18s no source was found either way: treating them
+     * as adults is an app choice. [bodyProfile] is kept so the apps' calls stay the same; it no
+     * longer moves the result.
      *
      * Liver impairment (1.8) and a medication interaction (1.4): app heuristic, a floor rather
      * than a typical value. Alcoholic liver disease has been measured at 60 and 168 h (Statland
@@ -137,7 +141,9 @@ enum class CaffeineGenotype(val halfLifeMultiplier: Double) {
  * trimester, through lower CYP1A2 activity (Gaohua et al., Br J Clin Pharmacol
  * 2012;74(5):873-885, doi:10.1111/j.1365-2125.2012.04363.x). It rises through pregnancy, to
  * 10.5 h in its last four weeks against 3 h (Knutti et al., Arch Toxicol Suppl 1982;5:187-192,
- * doi:10.1007/978-3-642-68511-8_33): late in pregnancy this understates it.
+ * doi:10.1007/978-3-642-68511-8_33): late in pregnancy the ratio, 3.5, is larger than 2.4.
+ * The factors are ratios and apply to the user's own [CaffeinePreferences.halfLifeMinutes], not
+ * to the studies' absolute hours.
  */
 enum class CaffeineHormonalStatus(val halfLifeMultiplier: Double) {
     NONE(1.0),

@@ -21,6 +21,19 @@ class CaffeinePreferencesTest {
     }
 
     @Test
+    fun `factors multiply`() {
+        val smokingOnThePill = base.copy(smoker = true, hormonalStatus = CaffeineHormonalStatus.ORAL_CONTRACEPTIVE)
+        assertEquals(315, smokingOnThePill.effectiveHalfLifeMinutes(BodyProfile()))
+    }
+
+    @Test
+    fun `the result is capped at the longest effective half-life`() {
+        // 300 x 2.4 x 1.8 = 1296 minutes.
+        val capped = base.copy(hormonalStatus = CaffeineHormonalStatus.PREGNANT, liverImpairment = true)
+        assertEquals(CaffeinePreferences.MaxEffectiveHalfLifeMinutes, capped.effectiveHalfLifeMinutes(BodyProfile()))
+    }
+
+    @Test
     fun `age and weight do not move it`() {
         val older = BodyProfile(birthYear = 1940, weightKg = 120.0)
         assertEquals(300, base.effectiveHalfLifeMinutes(older))
