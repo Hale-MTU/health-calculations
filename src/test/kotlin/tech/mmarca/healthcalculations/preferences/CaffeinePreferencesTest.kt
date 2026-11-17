@@ -8,8 +8,8 @@ class CaffeinePreferencesTest {
     private val base = CaffeinePreferences(halfLifeMinutes = 300)
 
     @Test
-    fun `smoking shortens the half-life to 0_6 of it`() {
-        assertEquals(180, base.copy(smoker = true).effectiveHalfLifeMinutes(BodyProfile()))
+    fun `smoking shortens the half-life to 0_7 of it`() {
+        assertEquals(210, base.copy(smoker = true).effectiveHalfLifeMinutes(BodyProfile()))
     }
 
     @Test

@@ -36,8 +36,11 @@ val heartRateRecoveryOffsets: List<Duration> = listOf(
  * and without a cool-down a fall of 18 bpm or less was the abnormal one
  * (Watanabe et al., "Heart rate recovery immediately after treadmill exercise
  * and left ventricular systolic dysfunction as predictors of mortality",
- * Circulation 2001;104(16):1911-1916, PMID 11602493). Neither is applied
- * here: the drop is reported, not judged. The other marks, tolerances and
+ * Circulation 2001;104(16):1911-1916, PMID 11602493). A meta-analysis of nine
+ * cohorts pools no cut-off: each 10 bpm less of recovery carried a hazard
+ * ratio of 1.09 for death and 1.13 for cardiovascular events (Qiu et al.,
+ * J Am Heart Assoc 2017;6(5):e005505, doi:10.1161/JAHA.117.005505). No
+ * cut-off is applied here: the drop is reported, not judged. The other marks, tolerances and
  * checks below are app choices, no published source.
  */
 val heartRateRecoveryHeadlineOffset: Duration = Duration.ofMinutes(1)

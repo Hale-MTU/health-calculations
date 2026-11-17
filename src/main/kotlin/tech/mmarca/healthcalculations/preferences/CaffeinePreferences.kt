@@ -29,15 +29,22 @@ data class CaffeinePreferences(
     /**
      * The half-life with this profile's factors applied, each a multiplier on [halfLifeMinutes].
      *
-     * Smoking: 3.5 h in smokers against 6.0 h in non-smokers (Parsons and Neims, Clin Pharmacol
-     * Ther 1978;24(1):40-45, doi:10.1002/cpt197824140), so 0.6. The oral contraceptive and
-     * pregnancy factors are on [CaffeineHormonalStatus].
+     * Smoking: 3.0 h in smokers against 4.3 h in non-smokers, smoking the one covariate of
+     * clearance in a population pharmacokinetic model (Seng et al., J Clin Pharm Ther
+     * 2009;34(1):103-114, doi:10.1111/j.1365-2710.2008.00976.x), so 0.7. Older studies found a
+     * larger effect, 3.5 h against 6.0 h (Parsons and Neims, Clin Pharmacol Ther 1978;24(1):40-45,
+     * doi:10.1002/cpt197824140). The oral contraceptive and pregnancy factors are on
+     * [CaffeineHormonalStatus].
      *
-     * Age and weight do not change it. Young and elderly men eliminate caffeine alike (Blanchard
-     * and Sawers, J Pharmacokinet Biopharm 1983;11(2):109-126, doi:10.1007/BF01061844), and
-     * obesity widens the volume of distribution without changing clearance (Abernethy, Todd and
-     * Schwartz, Br J Clin Pharmacol 1985;20(1):61-66, PMID 4027137). [bodyProfile] is kept so
-     * the apps' calls stay the same; it no longer moves the result.
+     * Age and weight do not change it. CYP1A2, which clears caffeine, was as active in severe
+     * obesity as in controls (Kvitne et al., Br J Clin Pharmacol 2022;88(9):4121-4133,
+     * doi:10.1111/bcp.15349) and in obese as in lean adolescents (Gade et al., J Clin Pharmacol
+     * 2026;66(6):e70219, doi:10.1002/jcph.70219); obesity widens the volume of distribution
+     * without changing clearance (Abernethy, Todd and Schwartz, Br J Clin Pharmacol
+     * 1985;20(1):61-66, PMID 4027137). Young and elderly men eliminate caffeine alike (Blanchard
+     * and Sawers, J Pharmacokinet Biopharm 1983;11(2):109-126, doi:10.1007/BF01061844); no later
+     * study found an age effect in adults. [bodyProfile] is kept so the apps' calls stay the
+     * same; it no longer moves the result.
      *
      * Liver impairment (1.8) and a medication interaction (1.4): app heuristic, a floor rather
      * than a typical value. Alcoholic liver disease has been measured at 60 and 168 h (Statland
@@ -54,7 +61,7 @@ data class CaffeinePreferences(
             cyp1a2Genotype.halfLifeMultiplier,
             ahrGenotype.halfLifeMultiplier,
             hormonalStatus.halfLifeMultiplier,
-            if (smoker) 0.6 else 1.0,
+            if (smoker) 0.7 else 1.0,
             if (liverImpairment) 1.8 else 1.0,
             if (medicationInteraction) 1.4 else 1.0,
         ).fold(1.0) { product, factor -> product * factor }
@@ -120,12 +127,17 @@ enum class CaffeineGenotype(val halfLifeMultiplier: Double) {
 /**
  * Oral contraceptives: 7.88 h against 5.37 h in matched controls on low-dose oestrogen pills,
  * clearance impaired and volume unchanged (Abernethy and Todd, Eur J Clin Pharmacol
- * 1985;28(4):425-428, doi:10.1007/BF00544361), so 1.5.
+ * 1985;28(4):425-428, doi:10.1007/BF00544361), so 1.5. A systematic analysis of 141 studies
+ * confirms the lower clearance with oral contraceptives without pooling a size (Grzegorzewski et
+ * al., Front Pharmacol 2022;12:752826, doi:10.3389/fphar.2021.752826); no later study measured it.
  *
  * Pregnancy: 8.3 h in pregnant women against 3.4 h outside pregnancy (Knutti, Rothweiler and
- * Schlatter, Eur J Clin Pharmacol 1981;21(2):121-126, doi:10.1007/BF00637512), so 2.4. It rises
- * through pregnancy, to 10.5 h in its last four weeks against 3 h (Knutti et al., Arch Toxicol
- * Suppl 1982;5:187-192, doi:10.1007/978-3-642-68511-8_33): late in pregnancy this understates it.
+ * Schlatter, Eur J Clin Pharmacol 1981;21(2):121-126, doi:10.1007/BF00637512), so 2.4. A
+ * pregnancy PBPK model calibrated on such data predicts caffeine exposure doubled by the third
+ * trimester, through lower CYP1A2 activity (Gaohua et al., Br J Clin Pharmacol
+ * 2012;74(5):873-885, doi:10.1111/j.1365-2125.2012.04363.x). It rises through pregnancy, to
+ * 10.5 h in its last four weeks against 3 h (Knutti et al., Arch Toxicol Suppl 1982;5:187-192,
+ * doi:10.1007/978-3-642-68511-8_33): late in pregnancy this understates it.
  */
 enum class CaffeineHormonalStatus(val halfLifeMultiplier: Double) {
     NONE(1.0),
