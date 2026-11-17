@@ -12,7 +12,9 @@ import org.junit.Test
 import tech.mmarca.healthcalculations.model.ActivityProgressPoint
 import tech.mmarca.healthcalculations.model.ExerciseData
 import tech.mmarca.healthcalculations.model.HeartRateSample
+import tech.mmarca.healthcalculations.model.HrvSample
 import tech.mmarca.healthcalculations.model.SleepData
+import tech.mmarca.healthcalculations.preferences.BiologicalSex
 import tech.mmarca.healthcalculations.preferences.BodyEnergyCalibration
 import tech.mmarca.healthcalculations.preferences.BodyProfile
 import tech.mmarca.healthcalculations.preferences.HeartZoneThresholds
@@ -843,12 +845,13 @@ class BodyEnergyTimelineTest {
     @Test
     fun `the age-derived max heart rate uses Tanaka, like the rest of the app`() {
         // Body Energy used 220 - age while heart-rate recovery used Tanaka.
-        // With age 33 and resting 60, zone 3 starts at 135 bpm under Tanaka and 136.2 under 220 - age.
-        // So 136 is zone 3 only under Tanaka; 140 is zone 3 under both.
+        // With age 33 and resting 60, light intensity (30 % of the reserve) starts at
+        // 97.5 bpm under Tanaka (max 185) and 98.1 under 220 - age (max 187).
+        // So 98 bpm drains only under Tanaka; 97 drains under neither.
         val start = dayStart.plus(Duration.ofHours(8))
         val end = start.plus(Duration.ofHours(2))
 
-        fun drainAt(bpm: Long): Int = calculateBodyEnergyTimeline(
+        fun drainAt(bpm: Long): Double = calculateBodyEnergyTimeline(
             inputs(
                 now = end,
                 previousEndScore = 100,
@@ -857,12 +860,185 @@ class BodyEnergyTimelineTest {
                 bodyProfile = BodyProfile(birthYear = date.year - 33),
                 restingHeartRateBpm = 60,
             )
-        ).drained
+        ).points.sumOf { it.intensityDrain }
 
-        // 136 bpm must already be zone 3, as Tanaka puts it.
-        assertEquals(drainAt(140), drainAt(136))
-        // 130 must still be zone 2, or the fixture spans one zone.
-        assertTrue(drainAt(130) < drainAt(136))
+        assertTrue(drainAt(98) > 0.0)
+        assertEquals(0.0, drainAt(97), 0.0)
+    }
+
+    @Test
+    fun `the activity drain climbs with the reserve inside one zone, as TRIMP does`() {
+        val start = dayStart.plus(Duration.ofHours(8))
+        val end = start.plus(Duration.ofHours(1))
+
+        fun drainAt(bpm: Long, sex: BiologicalSex? = null): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = end,
+                previousEndScore = 100,
+                samples = heartRateSamples(start, end, bpm = bpm),
+                bodyProfile = BodyProfile(sex = sex),
+                restingHeartRateBpm = restfulResting,
+                observedMaxHeartRateBpm = restfulMax,
+            )
+        ).points.sumOf { it.intensityDrain }
+
+        // 140 and 150 bpm are both zone 3 (60 to 75 % of a 55 to 190 reserve).
+        assertTrue(drainAt(150) > drainAt(140))
+        // Below the ACSM's light intensity (30 %, 95.5 bpm) there is no activity drain.
+        assertEquals(0.0, drainAt(90), 0.0)
+        // Banister's women's constants weigh every minute of the reserve above the men's.
+        assertTrue(drainAt(180, BiologicalSex.FEMALE) > drainAt(180, BiologicalSex.MALE))
+    }
+
+    @Test
+    fun `a night with HRV below the baseline's band charges less`() {
+        val start = dayStart
+        val end = start.plus(Duration.ofHours(6))
+        // ln(50 ms) mean, a spread of 0.1 on the log scale.
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun chargedAt(rmssdMs: Double?): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = end,
+                previousEndScore = 10,
+                samples = heartRateSamples(start, end, bpm = 55),
+                sleepSessions = listOf(sleep(start, end)),
+                restingHeartRateBpm = 58,
+                observedMaxHeartRateBpm = 188,
+                hrvSamples = rmssdMs?.let { hrvSamples(start, end, it) }.orEmpty(),
+                hrvBaseline = baseline,
+            )
+        ).points.sumOf { it.charge }
+
+        val withoutHrv = chargedAt(null)
+        // 47 ms is 0.6 deviations below: inside the band, neutral.
+        assertEquals(withoutHrv, chargedAt(47.0), 1e-9)
+        // 44 ms, 1.3 below: a tenth less.
+        assertEquals(withoutHrv * 0.90, chargedAt(44.0), 1e-9)
+        // 38 ms, 2.7 below: a quarter less.
+        assertEquals(withoutHrv * 0.75, chargedAt(38.0), 1e-9)
+        // 60 ms, 1.8 above: neutral, a high night is not read as better recovery.
+        assertEquals(withoutHrv, chargedAt(60.0), 1e-9)
+    }
+
+    @Test
+    fun `the night's HRV is its whole mean, the hours before midnight included`() {
+        val bedtime = dayStart.minus(Duration.ofHours(2))
+        val wake = dayStart.plus(Duration.ofHours(6))
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun chargedWith(hrv: List<HrvSample>): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = wake,
+                previousEndScore = 10,
+                samples = heartRateSamples(dayStart, wake, bpm = 55),
+                sleepSessions = listOf(sleep(bedtime, wake)),
+                restingHeartRateBpm = 58,
+                observedMaxHeartRateBpm = 188,
+                hrvSamples = hrv,
+                hrvBaseline = baseline,
+            )
+        ).points.sumOf { it.charge }
+
+        val withoutHrv = chargedWith(emptyList())
+        // 20 ms before midnight, 50 ms after: the night's mean is 42.5 ms, 1.6 deviations below,
+        // so every bucket after midnight charges less. The hours after midnight alone are neutral.
+        val lowEvening = hrvSamples(bedtime, dayStart, 20.0) + hrvSamples(dayStart, wake, 50.0)
+        assertEquals(withoutHrv * 0.90, chargedWith(lowEvening), 1e-9)
+        assertEquals(withoutHrv, chargedWith(hrvSamples(dayStart, wake, 50.0)), 1e-9)
+        // A single low 5-minute stretch in a normal night leaves the night's mean inside the band.
+        val night = hrvSamples(bedtime, wake, 50.0).map { sample ->
+            if (sample.time == dayStart.plus(Duration.ofHours(3))) sample.copy(rmssdMs = 20.0) else sample
+        }
+        assertEquals(withoutHrv, chargedWith(night), 1e-9)
+    }
+
+    @Test
+    fun `a night in two pieces is valued as one`() {
+        val wake = dayStart.plus(Duration.ofHours(7))
+        val pieces = listOf(
+            sleep(dayStart, dayStart.plus(Duration.ofHours(2))).copy(id = "first"),
+            sleep(dayStart.plus(Duration.ofMinutes(150)), wake).copy(id = "second"),
+        )
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun charged(hrv: List<HrvSample>): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = wake,
+                previousEndScore = 10,
+                samples = heartRateSamples(dayStart, wake, bpm = 55),
+                sleepSessions = pieces,
+                restingHeartRateBpm = 58,
+                observedMaxHeartRateBpm = 188,
+                hrvSamples = hrv,
+                hrvBaseline = baseline,
+            )
+        ).points.sumOf { it.charge }
+
+        // Both pieces take the whole night's factor, the shorter first one too.
+        val without = charged(emptyList())
+        val low = charged(hrvSamples(dayStart, wake, 38.0))
+        assertTrue(low < without)
+        val firstPiece = { hrv: List<HrvSample> ->
+            calculateBodyEnergyTimeline(
+                inputs(
+                    now = dayStart.plus(Duration.ofHours(2)),
+                    previousEndScore = 10,
+                    samples = heartRateSamples(dayStart, wake, bpm = 55),
+                    sleepSessions = pieces,
+                    restingHeartRateBpm = 58,
+                    observedMaxHeartRateBpm = 188,
+                    hrvSamples = hrv,
+                    hrvBaseline = baseline,
+                )
+            ).points.sumOf { it.charge }
+        }
+        assertEquals(firstPiece(emptyList()) * 0.75, firstPiece(hrvSamples(dayStart, wake, 38.0)), 1e-9)
+    }
+
+    @Test
+    fun `a nap's HRV is not held against the night's baseline`() {
+        val napStart = dayStart.plus(Duration.ofHours(14))
+        val napEnd = napStart.plus(Duration.ofMinutes(40))
+        val night = sleep(dayStart, dayStart.plus(Duration.ofHours(7)))
+        val nap = sleep(napStart, napEnd).copy(id = "nap")
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun napCharge(hrv: List<HrvSample>): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = napEnd,
+                previousEndScore = 10,
+                samples = heartRateSamples(napStart, napEnd, bpm = 55),
+                sleepSessions = listOf(night, nap),
+                restingHeartRateBpm = 58,
+                observedMaxHeartRateBpm = 188,
+                hrvSamples = hrv,
+                hrvBaseline = baseline,
+            )
+        ).points.filter { it.time >= napStart }.sumOf { it.charge }
+
+        assertEquals(napCharge(emptyList()), napCharge(hrvSamples(napStart, napEnd, 30.0)), 1e-9)
+    }
+
+    @Test
+    fun `daytime HRV no longer scales the drain`() {
+        val start = dayStart.plus(Duration.ofHours(8))
+        val end = start.plus(Duration.ofHours(2))
+        val baseline = HrvBaseline(lnRmssdMean = kotlin.math.ln(50.0), lnRmssdSd = 0.1)
+
+        fun drained(hrv: List<HrvSample>): Double = calculateBodyEnergyTimeline(
+            inputs(
+                now = end,
+                previousEndScore = 100,
+                samples = heartRateSamples(start, end, bpm = 140),
+                restingHeartRateBpm = restfulResting,
+                observedMaxHeartRateBpm = restfulMax,
+                hrvSamples = hrv,
+                hrvBaseline = baseline,
+            )
+        ).points.sumOf { it.intensityDrain + it.basalDrain + it.stressDrain }
+
+        assertEquals(drained(emptyList()), drained(hrvSamples(start, end, 20.0)), 1e-9)
     }
 
     @Test
@@ -933,10 +1109,14 @@ class BodyEnergyTimelineTest {
         sleepSessions: List<SleepData> = emptyList(),
         progress: List<ActivityProgressPoint> = emptyList(),
         basalMetabolicRate: Double? = null,
+        hrvSamples: List<HrvSample> = emptyList(),
+        hrvBaseline: HrvBaseline? = null,
     ): BodyEnergyTimelineInputs =
         BodyEnergyTimelineInputs(
             date = date,
             heartRateSamples = samples,
+            hrvSamples = hrvSamples,
+            hrvBaseline = hrvBaseline,
             sleepSessions = sleepSessions,
             workouts = workouts,
             activityProgress = progress,
@@ -958,6 +1138,16 @@ class BodyEnergyTimelineTest {
         generateSequence(start) { it.plus(Duration.ofMinutes(5)) }
             .takeWhile { it < end }
             .map { time -> HeartRateSample(time = time, beatsPerMinute = bpm, source = "test") }
+            .toList()
+
+    private fun hrvSamples(
+        start: Instant,
+        end: Instant,
+        rmssdMs: Double,
+    ): List<HrvSample> =
+        generateSequence(start) { it.plus(Duration.ofMinutes(5)) }
+            .takeWhile { it < end }
+            .map { time -> HrvSample(time = time, rmssdMs = rmssdMs, source = "test") }
             .toList()
 
     /** Hourly active kcal from [fromHour], accumulated into the cumulative series the algorithm expects. */

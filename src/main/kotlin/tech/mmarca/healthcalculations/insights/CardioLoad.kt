@@ -222,7 +222,7 @@ private fun calculateTrimp(
         }
 
         coveredMinutes += intervalMinutes
-        score += intervalMinutes * heartRateReserve * banisterWeighting(sex, heartRateReserve)
+        score += intervalMinutes * banisterTrimpPerMinute(sex, heartRateReserve)
     }
 
     if (coveredMinutes <= 0.0) return null
@@ -244,6 +244,10 @@ private fun calculateTrimp(
  */
 const val BanisterTrimpUrl = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6561225/"
 const val TrainingLoadReviewUrl = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4213373/"
+
+/** TRIMP per minute at [heartRateReserve], a fraction from 0 to 1. */
+internal fun banisterTrimpPerMinute(sex: BiologicalSex?, heartRateReserve: Double): Double =
+    heartRateReserve * banisterWeighting(sex, heartRateReserve)
 
 private fun banisterWeighting(sex: BiologicalSex?, heartRateReserve: Double): Double {
     val men = 0.64 * exp(1.92 * heartRateReserve)
