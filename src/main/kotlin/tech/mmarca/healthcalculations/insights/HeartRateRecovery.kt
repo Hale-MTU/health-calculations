@@ -31,8 +31,14 @@ val heartRateRecoveryOffsets: List<Duration> = listOf(
  * The headline mark: the one-minute drop. Cole et al., "Heart-rate recovery
  * immediately after exercise as a predictor of mortality", N Engl J Med
  * 1999;341(18):1351-1357, doi:10.1056/NEJM199910283411804: a fall of 12 bpm
- * or less in the first minute after peak exercise was abnormal. The other
- * marks, tolerances and checks below are app choices, no published source.
+ * or less in the first minute after peak exercise was abnormal. That cut-off
+ * holds for a cool-down at a walk. The guided test stops abruptly and rests,
+ * and without a cool-down a fall of 18 bpm or less was the abnormal one
+ * (Watanabe et al., "Heart rate recovery immediately after treadmill exercise
+ * and left ventricular systolic dysfunction as predictors of mortality",
+ * Circulation 2001;104(16):1911-1916, PMID 11602493). Neither is applied
+ * here: the drop is reported, not judged. The other marks, tolerances and
+ * checks below are app choices, no published source.
  */
 val heartRateRecoveryHeadlineOffset: Duration = Duration.ofMinutes(1)
 
