@@ -75,15 +75,20 @@ object HeartRateZones {
 
     /**
      * The time spent in each zone, zone 1 first: each reading counts until the
-     * next one, at most [MaxSampleGap]. The last reading counts for no time.
+     * next one, at most [MaxSampleGap], and with [activeWindows] only inside
+     * them, so a workout's pauses count nothing ([countedMillisBetween]). The
+     * last reading counts for no time.
      */
-    fun timeInZones(samples: List<HeartRateSample>, lowerBpm: List<Int>): List<Duration> {
+    fun timeInZones(
+        samples: List<HeartRateSample>,
+        lowerBpm: List<Int>,
+        activeWindows: List<CardioLoadTimeWindow> = emptyList(),
+    ): List<Duration> {
         val millis = LongArray(COUNT)
         val ordered = samples.sortedBy { it.time }
         for (index in 0 until ordered.size - 1) {
             val zone = zoneOf(ordered[index].beatsPerMinute, lowerBpm) ?: continue
-            val span = Duration.between(ordered[index].time, ordered[index + 1].time)
-            if (span <= MaxSampleGap) millis[zone] += span.toMillis()
+            millis[zone] += countedMillisBetween(ordered[index].time, ordered[index + 1].time, activeWindows)
         }
         return millis.map(Duration::ofMillis)
     }

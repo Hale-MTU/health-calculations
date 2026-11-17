@@ -13,7 +13,7 @@ take the same code, and its tests run on a plain JVM.
 
 | Package | What |
 | --- | --- |
-| `insights` | The calculations: workout and walking energy (Keytel, Compendium METs, ACSM), basal metabolic rate (Mifflin-St Jeor), maximum heart rate, cardio load (TRIMP), intensity minutes, heart rate recovery, splits and route elevation, bioimpedance body composition, sleep score, Body Energy, daily readiness, physiological stress, caffeine, baselines and comparisons, and the watch's sleep, nap and resting heart rate estimators |
+| `insights` | The calculations: workout and walking energy (Keytel, Compendium METs, ACSM), basal metabolic rate (Mifflin-St Jeor), maximum heart rate, cardio load and a workout's TRIMP, intensity minutes, heart rate recovery, VO2max from a route, splits and route elevation, bioimpedance body composition, sleep score, Body Energy, daily readiness, physiological stress, caffeine, baselines and comparisons, and the watch's sleep, nap and resting heart rate estimators |
 | `signal` | The Wear OS watch's raw sensors: beats from the PPG, RMSSD, respiratory rate, the accelerometer's per-minute features |
 | `cycle` | Cycle estimates, phases, ovulation markers, temperature shifts, nightly vitals |
 | `model` | The inputs and results the calculations read and return: exercise sessions, heart rate and HRV samples, sleep sessions and stages, vitals, cycle records, the day's signals for readiness |
