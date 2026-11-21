@@ -4,7 +4,6 @@ import java.time.Duration
 import java.time.Instant
 import tech.mmarca.healthcalculations.model.CaffeineEntry
 import tech.mmarca.healthcalculations.model.CaffeinePoint
-import tech.mmarca.healthcalculations.preferences.BodyProfile
 import tech.mmarca.healthcalculations.preferences.CaffeinePreferences
 
 /**
@@ -50,7 +49,6 @@ fun caffeineDrinkProfile(
     entry: CaffeineEntry,
     now: Instant,
     preferences: CaffeinePreferences,
-    bodyProfile: BodyProfile = BodyProfile(),
 ): CaffeineDrinkProfile {
     val normalized = preferences.normalized()
     val start = entry.startTime
@@ -62,7 +60,7 @@ fun caffeineDrinkProfile(
 
     var time = start
     while (!time.isAfter(end)) {
-        val value = CaffeineInsightCalculator.contributionMg(entry, time, normalized, bodyProfile)
+        val value = CaffeineInsightCalculator.contributionMg(entry, time, normalized)
         curve += CaffeinePoint(time, value)
         if (value > peakMg) {
             peakMg = value
@@ -76,7 +74,7 @@ fun caffeineDrinkProfile(
         curve = curve,
         peakMg = peakMg,
         peakTime = peakTime,
-        currentMg = CaffeineInsightCalculator.contributionMg(entry, now, normalized, bodyProfile),
+        currentMg = CaffeineInsightCalculator.contributionMg(entry, now, normalized),
         // Read after the peak: a threshold crossed on the way up is the drink arriving.
         halfGoneTime = curve.fallsBelow(peakTime, peakMg / 2.0),
         goneTime = curve.fallsBelow(peakTime, CaffeineNegligibleMg),
